@@ -1,0 +1,957 @@
+/*
+ * EmbedCV - an embeddable computer vision library
+ *
+ * Copyright (C) 2006  Chris Jang
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the
+ *
+ * Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor,
+ * Boston, MA  02110-1301  USA
+ *
+ * Email the author: cjang@ix.netcom.com
+ *
+ */
+
+
+#ifndef _EMBEDCV_CONFIG_H_
+#define _EMBEDCV_CONFIG_H_
+
+
+#include <stdio.h>
+#include <stdint.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
+
+
+/* Is the library built with JPEG decoding support? */
+#define @WITH_JPEG@ 1
+
+/* Is the library built with PPM encoding and decoding support? */
+#define @WITH_PPM@ 1
+
+
+/* Normal loop without any unrolling */
+#define NORMAL_LOOP(NUMBER, CODE) \
+    { \
+      size_t i_private; \
+      for (i_private = (NUMBER); i_private; --i_private) \
+      { \
+        CODE \
+      } \
+    }
+
+
+/* Macro implementing explicit loop unrolling */
+#define UNROLL_LOOP(NUMBER, CODE) \
+    if (@EXPLICIT_UNROLL_LOOP@) \
+    { \
+      const size_t reps = (NUMBER) >> 3; \
+      size_t i_private; \
+      for (i_private = reps; i_private; --i_private) \
+      { \
+        CODE CODE CODE CODE CODE CODE CODE CODE \
+      } \
+      \
+      switch ((NUMBER) - (reps << 3)) \
+      { \
+        case 7: CODE \
+        case 6: CODE \
+        case 5: CODE \
+        case 4: CODE \
+        case 3: CODE \
+        case 2: CODE \
+        case 1: CODE \
+      } \
+    } \
+    else \
+    { \
+      size_t i_private; \
+      for (i_private = (NUMBER); i_private; --i_private) \
+      { \
+        CODE \
+      } \
+    }
+
+
+/******************************************************************************
+ * BASIC TYPES
+ *
+ */
+
+/* Basic 8 bit image struct */
+typedef struct
+{
+  uint8_t *data;
+  size_t  width;
+  size_t  height;
+} Image8_t;
+
+/* Convenience macro for defining an 8 bit image */
+#define IMAGE8( NAME, WIDTH, HEIGHT ) \
+  Image8_t NAME ; \
+  uint8_t NAME ## data[ ( WIDTH ) * ( HEIGHT ) ]; \
+  NAME .data = NAME ## data; \
+  NAME .width = WIDTH ; \
+  NAME .height = HEIGHT ;
+
+/* dynamically allocate on heap */
+#define IMAGE8MALLOC( NAME, WIDTH, HEIGHT ) \
+  Image8_t NAME ; \
+  NAME .data = malloc( sizeof(uint8_t) * ( WIDTH ) * ( HEIGHT ) ); \
+  NAME .width = WIDTH ; \
+  NAME .height = HEIGHT ;
+
+#define IMAGE8FREE( NAME ) free( NAME .data );
+
+/* Basic 16 bit image struct */
+typedef struct
+{
+  uint16_t *data;
+  size_t   width;
+  size_t   height;
+} Image16_t;
+
+/* Convenience macro for defining an 16 bit image */
+#define IMAGE16( NAME, WIDTH, HEIGHT ) \
+  Image16_t NAME ; \
+  uint16_t NAME ## data[ ( WIDTH ) * ( HEIGHT ) ]; \
+  NAME .data = NAME ## data; \
+  NAME .width = WIDTH ; \
+  NAME .height = HEIGHT ;
+
+/* dynamically allocate on heap */
+#define IMAGE16MALLOC( NAME, WIDTH, HEIGHT ) \
+  Image16_t NAME ; \
+  NAME .data = malloc( sizeof(uint16_t) * ( WIDTH ) * ( HEIGHT ) ); \
+  NAME .width = WIDTH ; \
+  NAME .height = HEIGHT ;
+
+#define IMAGE16FREE( NAME ) free( NAME .data );
+
+/* Basic 32 bit image struct */
+typedef struct
+{
+  uint32_t *data;
+  size_t   width;
+  size_t   height;
+} Image32_t;
+
+/* Convenience macro for defining a 32 bit image */
+#define IMAGE32( NAME, WIDTH, HEIGHT ) \
+  Image32_t NAME ; \
+  uint32_t NAME ## data[ ( WIDTH ) * ( HEIGHT ) ]; \
+  NAME .data = NAME ## data; \
+  NAME .width = WIDTH ; \
+  NAME .height = HEIGHT ;
+
+#define IMAGE32MALLOC( NAME, WIDTH, HEIGHT ) \
+  Image32_t NAME ; \
+  NAME .data = malloc( sizeof(uint32_t) * ( WIDTH ) * ( HEIGHT ) ); \
+  NAME .width = WIDTH ; \
+  NAME .height = HEIGHT ;
+
+#define IMAGE32FREE( NAME ) free( NAME .data );
+
+/* Store histogram information inside this struct. This includes: the counts
+ * for each bin (probability density histogram); the cumulative distribution;
+ * the partial expectation values for every index.
+ */
+typedef struct
+{
+  size_t *bins;
+  size_t *sumBins;
+  size_t *meanBins;
+  size_t numberBins;
+  size_t numberCounts;
+} Histogram_t;
+
+/* Convenience macro for defining a histogram */
+#define HISTOGRAM( NAME, NUMBINS ) \
+  Histogram_t NAME ; \
+  size_t NAME ## bins[ NUMBINS ]; \
+  size_t NAME ## sumbins[ NUMBINS ]; \
+  size_t NAME ## meanbins[ NUMBINS ]; \
+  NAME .bins = NAME ## bins; \
+  NAME .sumBins = NAME ## sumbins; \
+  NAME .meanBins = NAME ## meanbins; \
+  NAME .numberBins = NUMBINS ; \
+  memset( NAME ## bins, 0, NUMBINS * sizeof(size_t) );
+
+/* Convenience macros for defining common image histograms */
+#define HISTOGRAM8( NAME ) HISTOGRAM( NAME, 256 )
+#define HISTOGRAM16( NAME ) HISTOGRAM( NAME, 65536 )
+#define HISTOGRAMCBCR( NAME ) HISTOGRAM( NAME, 361 )
+
+/* Image I/O is buffered */
+typedef struct
+{
+  uint8_t       *head;      /* permanent pointer to head of array */
+  uint8_t       *position;  /* index into the buffer array */
+  const uint8_t *tail;      /* permanent pointer to tail of array */
+  const uint8_t *size;      /* how much data is in the buffer array */
+} Buffer_t;
+
+/* Buffer for ReadByte() to use */
+#define READBUFFER( NAME, LENGTH ) \
+  Buffer_t NAME; \
+  uint8_t NAME ## data[ LENGTH ]; \
+  NAME .head = NAME ## data; \
+  NAME .tail = NAME .head + LENGTH; \
+  NAME .size = NAME .head; \
+  NAME .position = NAME .head;
+
+/* Packed 16 bit words of CbCr pixels are useful for pure chroma images */
+typedef union
+{
+  uint16_t CbCr;
+  uint8_t  data[2];
+} PackedCbCr_t;
+
+/* Convenience macros for image segmentation map arrays */
+#define SEGMAP( NAME, LENGTH ) \
+  uint8_t NAME [ LENGTH ]; \
+  memset( NAME , 0, sizeof(uint8_t) * LENGTH );
+
+#define SEGMENTMAP( NAME ) SEGMAP( NAME, 256 )
+#define SEGMENTMAPCBCR( NAME ) SEGMAP( NAME, 65536 )
+#define SEGMENTMAP565( NAME ) SEGMAP( NAME, 65536 )
+
+/* Hough transform bin image */
+#define IMAGEHOUGHMALLOC( NAME, WIDTH, HEIGHT ) \
+  Image32_t NAME ; \
+  NAME .width = 128 ; \
+  NAME .height = (WIDTH >> 3) + (HEIGHT >> 3); \
+  NAME .data = malloc( sizeof(uint32_t) * (NAME .width) * (NAME .height) ); \
+  memset( NAME .data, 0, sizeof(uint32_t) * (NAME .width) * (NAME .height) );
+
+#define IMAGEHOUGHFREE( NAME ) free( NAME .data );
+
+
+/******************************************************************************
+ * DRAWING INTO IMAGES
+ *
+ */
+
+/* Draw a character into an image */
+void DrawImageChar (Image8_t     *outImg,
+                    const char    character,
+                    const size_t  column,
+                    const size_t  row,
+                    const uint8_t foreground,
+                    const int     bkgdShift);
+
+/* Draw a string into an image */
+void DrawImageString (Image8_t     *outImg,
+                      const char   *text,
+                      const size_t  column,
+                      const size_t  row,
+                      const uint8_t foreground,
+                      const int     bkgdShift);
+
+/* Draw a bounding box (no fill) into an image */
+void DrawImageBoundingBox (Image8_t     *outImg,
+                           const size_t  column,
+                           const size_t  row,
+                           const size_t  boxWidth,
+                           const size_t  boxHeight,
+                           const uint8_t foreground);
+
+/* Draw a line into an image */
+void DrawImageLine(Image8_t     *outImg,
+                   const size_t  beginX,
+                   const size_t  beginY,
+                   const size_t  endX,
+                   const size_t  endY,
+                   const uint8_t foreground);
+
+/* Draw a Hough transform line into an image */
+void DrawHoughLine(Image8_t     *outImg,
+                   const size_t  originX,
+                   const size_t  originY,
+                   const size_t  theta,
+                   const size_t  radius,
+                   const uint8_t foreground);
+
+
+/******************************************************************************
+ * UTILITY MACROS AND INLINE FUNCTIONS
+ *
+ */
+
+/* Often need the absolute difference between two unsigned integers */
+#define UINTDIFF( v1, v2 ) ( ((v1) < (v2)) ? (v2) - (v1) : (v1) - (v2) )
+
+/* Integer square roots using Newton's method */
+size_t UintSqrt(size_t value);
+
+/* Returns orientation as angle from 0 to 360 (orientation 0 to 127) */
+size_t ApproxAtan2(int16_t dy, int16_t dx);
+
+/* Returns 65536*sin(theta) for angle from 0 to 360 (orientation 0 to 127) */
+int32_t UintSin(size_t theta);
+
+/* Returns 65536*cos(theta) for angle from 0 to 360 (orientation 0 to 127) */
+int32_t UintCos(size_t theta);
+
+/* Returns 65536*tan(theta) for angle from 0 to 360 (orientation 0 to 127) */
+int32_t UintTan(size_t theta);
+
+/* The sum norm (one norm) distance between two packed 16 bit CbCr pixels.
+ * This is the sum of the absolute differences for Cb and Cr taken
+ * individually.
+ */
+#define CBCR1DIST( v1, v2 ) \
+( UINTDIFF( ((PackedCbCr_t)v1).data[0], ((PackedCbCr_t)v2).data[0] ) \
+  + UINTDIFF( ((PackedCbCr_t)v1).data[1], ((PackedCbCr_t)v2).data[1] ) )
+
+/* Sum of squared differences between two packed 16 bit CbCr pixels.
+ * This is the square of the Euclidean (two norm) distance. This is more
+ * convenient sometimes as it avoids a square root.
+ */
+#ifdef USE_INLINE
+static inline
+#endif
+size_t CbCrSSD(const uint16_t v1, const uint16_t v2)
+#ifdef USE_INLINE
+{
+  const uint16_t diff1 = UINTDIFF( ((PackedCbCr_t)v1).data[0],
+                                   ((PackedCbCr_t)v2).data[0] );
+  const uint16_t diff2 = UINTDIFF( ((PackedCbCr_t)v1).data[1],
+                                   ((PackedCbCr_t)v2).data[1] );
+  return diff1 * diff1 + diff2 * diff2;
+}
+#else
+;
+#endif
+
+/* Euclidean (two norm) distance between two packed 16 bit CbCr pixels */
+#define CBCR2DIST( v1, v2 ) UintSqrt( CbCrSSD( v1, v2 ) )
+
+/* Euclidean (two norm) measure of a packed 16 bit CbCr pixel */
+#define CBCR2NORM( v ) CBCR2DIST( 0, v )
+
+/* Convert 8 bit RGB to YCbCr */
+#ifdef USE_INLINE
+static inline
+#endif
+void YCbCrFromRGB (uint8_t *outY,          /* luminance */
+                   uint8_t *outCb,         /* chroma blue */
+                   uint8_t *outCr,         /* chroma red */
+                   const uint8_t inRed,
+                   const uint8_t inGreen,
+                   const uint8_t inBlue)
+#ifdef USE_INLINE
+{
+  size_t tmpY, tmpCb, tmpCr;
+
+  tmpY   = inRed * 299;
+  tmpCb  = 128000000 - 168736 * inRed;
+  tmpCr  = 128000000 + 500000 * inRed;
+
+  tmpY  += 587 * inGreen;
+  tmpCb -= 331264 * inGreen;
+  tmpCr -= 418688 * inGreen;
+
+  tmpY  += 114 * inBlue;
+  tmpCb += 500000 * inBlue;
+  tmpCr -= 81312 * inBlue;
+
+  *outY  = tmpY / 1000;
+  *outCb = tmpCb / 1000000;
+  *outCr = tmpCr / 1000000;
+}
+#else
+;
+#endif
+
+/* Buffered reading of bytes from a stream
+ *
+ * This is the slow but safer version. It returns indication of failure so
+ * that seeking to a marker string in a stream does not become stuck in an
+ * infinite loop in case of failure.
+ */
+#ifdef USE_INLINE
+static inline
+#endif
+int ReadByte (uint8_t  *outValue,
+              FILE     *inStream,
+              Buffer_t *inoutBuffer)
+#ifdef USE_INLINE
+{
+  if ( (inoutBuffer->position == inoutBuffer->size) && (! feof(inStream)) )
+  {
+    inoutBuffer->position = inoutBuffer->head;
+    inoutBuffer->size = inoutBuffer->head +
+                        fread(inoutBuffer->head,
+                              sizeof(uint8_t),
+                              inoutBuffer->tail - inoutBuffer->head,
+                              inStream);
+  }
+
+  if (inoutBuffer->position < inoutBuffer->size)
+  {
+    *outValue = *inoutBuffer->position++;
+    return 1;
+  }
+  else
+  {
+    return 0;
+  }
+}
+#else
+;
+#endif
+
+/* Buffered reading of bytes from a stream
+ *
+ * This is the fast and unsafe version. No indication of success or failure is
+ * returned. This should only be used when reading image data. An infinite loop
+ * is not possible in the case of I/O error. Only a finite number of pixels
+ * will be read in from the stream.
+ */
+#ifdef USE_INLINE
+static inline
+#endif
+uint8_t ReadByteFast (FILE     *inStream,
+                      Buffer_t *inoutBuffer)
+#ifdef USE_INLINE
+{
+  if ( (inoutBuffer->position == inoutBuffer->size) && (! feof(inStream)) )
+  {
+    inoutBuffer->position = inoutBuffer->head;
+    inoutBuffer->size = inoutBuffer->head +
+                        fread(inoutBuffer->head,
+                              sizeof(uint8_t),
+                              inoutBuffer->tail - inoutBuffer->head,
+                              inStream);
+  }
+
+  if (inoutBuffer->position < inoutBuffer->size)
+  {
+    return *inoutBuffer->position++;
+  }
+  else
+  {
+    return 0;
+  }
+}
+#else
+;
+#endif
+
+/* Seek to a mark string in the stream. This is typically useful for finding
+ * the start of an image as they begin with magic strings. If a non-null buffer
+ * is passed in, then the stream is saved in the buffer as it is read. This
+ * includes the marker string.
+ */
+void SeekMarker (uint8_t       *markBuffer,
+                 const size_t   markLength,
+                 const uint8_t *markString,
+                 Buffer_t      *outBuffer,      /* optional - may be null */
+                 FILE          *stream,
+                 Buffer_t      *streamBuffer);
+
+
+/******************************************************************************
+ * IMAGE MANIPULATION
+ *
+ */
+
+/* Crop out subimage */
+void CropImage (Image8_t       *outImg,    /* smaller destination image */
+                const Image8_t *inImg,     /* larger source image */
+                const size_t    inColumn,  /* position in source image */
+                const size_t    inRow);
+
+/* 16 bit word version */
+void CropImageW (Image16_t       *outImg,    /* smaller destination image */
+                 const Image16_t *inImg,     /* larger source image */
+                 const size_t     inColumn,  /* position in source image */
+                 const size_t     inRow);
+
+/* Paste in subimage */
+void PasteImage (Image8_t       *outImg,    /* larger destination image */
+                 const Image8_t *inImg,     /* smaller source image */
+                 const size_t    outColumn, /* position in destination image */
+                 const size_t    outRow);
+
+/* Downsample an image */
+void DownsampleImage (Image8_t       *outImg,  /* smaller destination image */
+                      const Image8_t *inImg);  /* larger source image */
+
+/* 16 bit word version */
+void DownsampleImageW (Image16_t       *outImg, /* smaller destination image */
+                       const Image16_t *inImg); /* larger source image */
+
+/* Upsample an image */
+void UpsampleImage (Image8_t       *outImg,  /* larger destination image */
+                    const Image8_t *inImg);  /* smaller source image */
+
+/* Flip an image up/down */
+void FlipImage (Image8_t *outImg);
+
+/* 16 bit word version */
+void FlipImageW (Image16_t *outImg);
+
+/* Flop an image left/right */
+void FlopImage (Image8_t *outImg);
+
+/* 16 bit word version */
+void FlopImageW (Image16_t *outImg);
+
+/* Convert a RGB image to YCbCr */
+void ConvertImageRGBtoYCbCr (Image8_t       *outYImg,
+                             Image8_t       *outCbImg,
+                             Image8_t       *outCrImg,
+                             const Image8_t *inRedImg,
+                             const Image8_t *inGreenImg,
+                             const Image8_t *inBlueImg);
+
+/* packed 16 bit CbCr pixel version */
+void ConvertImageRGBtoYCbCrPacked (Image8_t       *outYImg,
+                                   Image16_t      *outCbCrImg,
+                                   const Image8_t *inRedImg,
+                                   const Image8_t *inGreenImg,
+                                   const Image8_t *inBlueImg);
+
+
+/******************************************************************************
+ * HISTOGRAMS AND HISTOGRAM BASED IMAGE OPERATIONS
+ *
+ */
+
+/* Count the pixel values into histogram bins */
+void ImageHistogram (Histogram_t    *outHistogram,  /* 256 bins */
+                     const Image8_t *inImg);
+
+/* create histogram of pixel distances from supplied reference pixel */
+void ImageHistogramDist (Histogram_t    *outHistogram,  /* 256 bins */
+                         const Image8_t *inImg,
+                         const uint8_t   value);
+
+/* 16 bit packed CbCr pixel version - useful special case */
+void ImageHistogramCbCr (Histogram_t     *outCbHistogram,  /* 256 bins */
+                         Histogram_t     *outCrHistogram,  /* 256 bins */
+                         const Image16_t *inImg);
+
+/* create histogram of pixel distances from supplied reference pixel in CbCr */
+void ImageHistogramCbCrDist (Histogram_t     *outHistogram,  /* 361 bins */
+                             const Image16_t *inImg,
+                             const uint16_t   value);
+
+/* Compute histogram statistics: minimum, maximum, mean, variance */
+void HistogramStats (size_t *outMinIdx,        /* index of minimum value */
+                     size_t *outMaxIdx,        /* index of maximum value */
+                     size_t *outMeanIdx,       /* index of mean value */
+                     size_t *outVariance,      /* variance */
+                     const Histogram_t *inHistogram);
+
+/* Compute the index of the median value of the histogram */
+size_t HistogramMedian (const Histogram_t *inHistogram);
+
+/* Histogram equalize an image */
+void EqualizeImage (Image8_t          *outImg,
+                    const Histogram_t *inHistogram);
+
+/* convenient macro for equalizing an image */
+#define EQUALIZEIMG( IMGNAME ) \
+HISTOGRAM8( IMGNAME ## Histogram ) \
+ImageHistogram( & IMGNAME ## Histogram, & IMGNAME ); \
+EqualizeImage( & IMGNAME , & IMGNAME ## Histogram );
+
+/* Compute Otsu's image segmentation threshold */
+size_t OtsuThreshold (const Histogram_t *inHistogram);
+
+/* Add to image segmentation map */
+void SegmentMap (uint8_t       *outMap,          /* length is 256 */
+                 const uint8_t  center,
+                 const size_t   threshold,
+                 const uint8_t  value);
+
+/* 16 bit packed CbCr pixel version - useful special case */
+void SegmentMapCbCr (uint8_t        *outMap,     /* length is 65536 */
+                     const uint16_t  center,
+                     const size_t    threshold,
+                     const uint8_t   value);
+
+/* Segment an image */
+void SegmentImage (Image8_t       *outImg,
+                   const Image8_t *inImg,
+                   const uint8_t  *inMap);
+
+/* 16 bit packed CbCr pixel version - useful special case */
+void SegmentImageW (Image8_t        *outImg,
+                    const Image16_t *inImg,
+                    const uint8_t   *inMap);
+
+/* Split individual image segments out from a single image after segmentation */
+void SplitImageSegmentation (Image8_t       **outImg,
+                             const Image8_t  *inImg);
+
+
+/******************************************************************************
+ * IMAGE OPERATIONS
+ *
+ */
+
+/* Arithmetic macros for images */
+#define OPIMGTOIMG( OP, A, B, C ) \
+{ \
+  const size_t count = A .width * A .height; \
+  size_t i; \
+  for (i = 0; i < count; i++) \
+  { \
+    A .data[i] = B .data[i] OP C .data[i]; \
+  } \
+}
+
+#define OPIMGTOSCALAR( OP, A, B, C ) \
+{ \
+  const size_t count = A .width * A .height; \
+  size_t i; \
+  for (i = 0; i < count; i++) \
+  { \
+    A .data[i] = B .data[i] OP C; \
+  } \
+}
+
+#define ADDIMAGES( A, B, C ) OPIMGTOIMG( +, A, B, C )
+#define SUBIMAGES( A, B, C ) OPIMGTOIMG( -, A, B, C )
+#define MULIMAGES( A, B, C ) OPIMGTOIMG( *, A, B, C )
+#define DIVIMAGES( A, B, C ) OPIMGTOIMG( /, A, B, C )
+
+#define ADDIMGSCALAR( A, B, C ) OPIMGTOSCALAR( +, A, B, C )
+#define SUBIMGSCALAR( A, B, C ) OPIMGTOSCALAR( -, A, B, C )
+#define MULIMGSCALAR( A, B, C ) OPIMGTOSCALAR( *, A, B, C )
+#define DIVIMGSCALAR( A, B, C ) OPIMGTOSCALAR( /, A, B, C )
+
+/* Sobel edge detection */
+void SobelEdges (Image16_t      *outImgX,  /* same dimensions as inImg */
+                 Image16_t      *outImgY,  /* same dimensions as inImg */
+                 const Image8_t *inImg);
+
+/* Compute magnitude image of gradient from two edge images */
+void EdgeImagesTo1Norm (Image8_t        *outImg,
+                        const Image16_t *inImgEdgeX,
+                        const Image16_t *inImgEdgeY,
+                        const size_t     shift);  /* right shift rescale */
+
+/* Euclidean norm - warning, uses square root for every pixel */
+void EdgeImagesTo2Norm (Image8_t        *outImg,
+                        const Image16_t *inImgEdgeX,
+                        const Image16_t *inImgEdgeY,
+                        const size_t     shift);  /* right shift rescale */
+
+/* Square of the Euclidean norm */
+void EdgeImagesToSS (Image8_t        *outImg,
+                     const Image16_t *inImgEdgeX,
+                     const Image16_t *inImgEdgeY,
+                     const size_t     shift);     /* right shift rescale */
+
+/* Binary image morphology operations (erosion and dilation) */
+
+/* horizontal region change */
+void RegionErode31 (Image8_t  *inoutImg, const uint8_t mark);
+void RegionErode51 (Image8_t  *inoutImg, const uint8_t mark);
+void RegionDilate31 (Image8_t *inoutImg, const uint8_t mark);
+void RegionDilate51 (Image8_t *inoutImg, const uint8_t mark);
+/* vertical region change */
+void RegionErode13 (Image8_t  *inoutImg, const uint8_t mark);
+void RegionErode15 (Image8_t  *inoutImg, const uint8_t mark);
+void RegionDilate13 (Image8_t *inoutImg, const uint8_t mark);
+void RegionDilate15 (Image8_t *inoutImg, const uint8_t mark);
+/* square structuring element */
+void RegionErode33 (Image8_t  *inoutImg, const uint8_t mark);
+void RegionErode55 (Image8_t  *inoutImg, const uint8_t mark);
+void RegionDilate33 (Image8_t *inoutImg, const uint8_t mark);
+void RegionDilate55 (Image8_t *inoutImg, const uint8_t mark);
+
+/* Binomial averaged image sequence */
+void BinAvgImageSeq (Image8_t       *inoutImg,
+                     const Image8_t *inImg);
+
+/* Difference between two images */
+void DiffImages (Image8_t       *outImg,
+                 const Image8_t *inImg1,
+                 const Image8_t *inImg2,
+                 const uint8_t  *inMap);  /* segmentation map */
+
+/* Blur an image using a 3x3 box window average */
+void BlurImage33 (Image8_t       *outImg,
+                  const Image8_t *inImg);
+
+/* Blur an image using a modified 3x3 box window average */
+void BlurImage33Fast (Image8_t       *outImg,
+                      const Image8_t *inImg);
+
+
+/******************************************************************************
+ * INTEGRAL IMAGE FEATURE CASCADE
+ *
+ */
+
+/* Integral image transform (as used by Viola and Jones) */
+void IntegralImage (Image32_t      *outImg,
+                    const Image8_t *inImg);
+
+/* Convert the integral feature image to an 8 bit image */
+void ConvertIntegralFeatureImage (Image8_t        *outImg,
+                                  const Image32_t *inImg,  /* feature image */
+                                  const size_t     shift); /* rescale */
+
+/* Integral image feature of two boxes, one above the other
+ * This detects vertically oriented features.
+ */
+void IntegralFeatureUpDown (Image32_t       *outImg,
+                            size_t          *outMaxValue,
+                            const Image32_t *inImg,    /* the integral image */
+                            const size_t     boxWidth,
+                            const size_t     boxHeight,
+                            const size_t     colStep,
+                            const size_t     rowStep);
+
+
+/* Integral image feature of two boxes, one left and the other right
+ * This detects horizontally oriented features.
+ */
+void IntegralFeatureLeftRight (Image32_t       *outImg,
+                               size_t          *outMaxValue,
+                               const Image32_t *inImg, /* the integral image */
+                               const size_t     boxWidth,
+                               const size_t     boxHeight,
+                               const size_t     colStep,
+                               const size_t     rowStep);
+
+/* Integral image feature of along the diagonal with four boxes
+ * This detects features along the diagonal or corners.
+ */
+void IntegralFeatureDiagonal (Image32_t       *outImg,
+                              size_t          *outMaxValue,
+                              const Image32_t *inImg,
+                              const size_t     boxWidth,
+                              const size_t     boxHeight,
+                              const size_t     colStep,
+                              const size_t     rowStep);
+
+/*
+typedef struct
+{
+
+} IntegralFeatureCascade_t;
+*/
+
+
+/******************************************************************************
+ * HOUGH TRANSFORM
+ *
+ */
+
+/* Calculate radius distance of Hough transform edge line */
+int16_t HoughRadius(const int16_t x,
+                    const int16_t y,
+                    const size_t theta);
+
+/* Add the line votes from an image point to the Hough image */
+void HoughVoteLine(Image32_t    *img,
+                   const int16_t  x,
+                   const int16_t  y,
+                   const int16_t dy,
+                   const int16_t dx,
+                   const size_t  neighborhood);
+
+
+/******************************************************************************
+ * IMAGE FORMAT SUPPORT
+ * 
+ * Image decoding formats supported: JPEG, PPM (raw binary format, not ASCII)
+ *
+ * Input colorspaces for image formats:
+ *     8 bit grayscale 
+ *     24 bit RGB (JPEGs compressed in YCbCr)
+ *
+ * Output colorspaces after decoding images:
+ *     8 bit grayscale              in Image8_t
+ *     16 bit 5/6/5 R/G/B packed    in Image16_t
+ *     24 bit 8/8/8 R/G/B           in Image8_t,  Image8_t,  Image8_t
+ *     24 bit 8/8/8 Y/Cb/Cr         in Image8_t,  Image8_t,  Image8_t
+ *     24 bit 8/16  Y/CbCr packed   in Image8_t,  Image16_t
+ */
+
+typedef enum
+{
+  ECV_UNKNOWN  = 0,
+  ECV_JPEG     = 1,
+  ECV_PPM_GRAY = 2,
+  ECV_PPM_RGB  = 4
+} EcvImageType;
+
+EcvImageType GuessImageType (FILE *s);
+
+
+/******************************************************************************
+ * JPEG SUPPORT (OPTIONAL)
+ *
+ */
+#ifdef WITH_JPEG
+
+#include <jpeglib.h>
+
+/* seek to next SOI marker and optionally store compressed JPEG */
+void BufferJPEG (Buffer_t *outb, FILE *s, Buffer_t *sb);
+
+/* quickly crop a JPEG image along DCT blocks */
+void CropJPEG (FILE *dstStream,
+               FILE *srcStream,
+               const size_t width,
+               const size_t height,
+               const size_t xoffset,
+               const size_t yoffset);
+
+/* read JPEG header and initialize decompressor
+ *
+ * useful settings:
+ *
+ *     s = fdopen(0, "r");
+ *     s = fmemopen(buf->head, buf->size - buf->head, "r");
+ *
+ *     force_colorspace  = JCS_UNKNOWN   (don't force image to anything)
+ *                         JCS_GRAYSCALE (faster decoding of color image)
+ *                         JCS_RGB       (24 bit red/green/blue)
+ *                         JCS_YCbCr     (24 bit luma/chromaB/chromaR)
+ *
+ *     force_scale       = 2             (faster decoding with half size)
+ *                         4             (faster decoding with quarter size)
+ *                         8             (faster decoding with eighth size)
+ *                         any other value and leave dimensions as original
+ */
+void ReadJPEGHead (size_t *outwidth,
+                   size_t *outheight,
+                   size_t *outcomponents,  /* number components per pixel */
+                   FILE *s,
+                   struct jpeg_decompress_struct *cinfo,
+                   struct jpeg_error_mgr         *jerr,
+                   J_COLOR_SPACE                  force_colorspace,
+                   const size_t                   force_scale);
+
+/* decode one component (grayscale) */
+void ReadJPEG8 (Image8_t *img,
+                FILE *s,
+                struct jpeg_decompress_struct *cinfo);
+
+/* decode three components ABC and pack into 5/6/5 A/B/C uint16_t, A is LSB */
+void ReadJPEG565 (Image16_t *img,
+                  FILE *s,
+                  struct jpeg_decompress_struct *cinfo);
+
+/* decode three components ABC */
+void ReadJPEG888 (Image8_t *imga,
+                  Image8_t *imgb,
+                  Image8_t *imgc,
+                  FILE *s,
+                  struct jpeg_decompress_struct *cinfo);
+
+/* decode three components ABC and pack the last two BC into uint16_t */
+void ReadJPEG816 (Image8_t *imga,
+                  Image16_t *imgbc,
+                  FILE *s,
+                  struct jpeg_decompress_struct *cinfo);
+
+/* write JPEG header and initialize compressor
+ *
+ */
+void WriteJPEGHead (FILE *s,
+                    struct jpeg_compress_struct *cinfo,
+                    struct jpeg_error_mgr       *jerr,
+                    const size_t                 width,
+                    const size_t                 height,
+                    const size_t                 components,
+                    J_COLOR_SPACE                colorspace,
+                    J_COLOR_SPACE                force_colorspace);
+
+/* encode one component (grayscale) */
+void WriteJPEG8 (FILE *s, struct jpeg_compress_struct *cinfo, const Image8_t *img);
+
+/* encode packed 5/6/5 A/B/C uint16_t, A is LSB, as three components */
+void WriteJPEG565 (FILE *s, struct jpeg_compress_struct *cinfo, const Image16_t *img);
+
+/* encode three components ABC */
+void WriteJPEG888 (FILE *s, struct jpeg_compress_struct *cinfo, const Image8_t *imga, const Image8_t *imgb, const Image8_t *imgc);
+
+/* encode packed 8/16 into three components */
+void WriteJPEG816 (FILE *s, struct jpeg_compress_struct *cinfo, const Image8_t *imga, const Image16_t *imgbc);
+
+#endif
+
+
+/******************************************************************************
+ * PPM SUPPORT (OPTIONAL)
+ *
+ */
+#ifdef WITH_PPM
+
+/* read */
+
+void ReadPPMHead (size_t *width,
+                  size_t *height,
+                  size_t *components,
+                  FILE *s,
+                  Buffer_t *sb);
+
+void ReadPPM8 (Image8_t *img,
+               FILE *s,
+               Buffer_t *sb);
+
+void ReadPPM565 (Image16_t *img,
+                 FILE *s,
+                 Buffer_t *sb);
+
+void ReadPPM888 (Image8_t *red,
+                 Image8_t *green,
+                 Image8_t *blue,
+                 FILE *s,
+                 Buffer_t *sb);
+
+void ReadPPM816 (Image8_t *luma,
+                 Image16_t *chroma,
+                 FILE *s,
+                 Buffer_t *sb);
+
+/* write */
+
+void WritePPMHead (FILE *s,
+                   const size_t width,
+                   const size_t height,
+                   const size_t components);
+
+void WritePPM8 (FILE *s,
+                const Image8_t *img);
+
+void WritePPM565 (FILE *s,
+                  const Image16_t *rgb);
+
+void WritePPM888 (FILE *s,
+                  const Image8_t *red,
+                  const Image8_t *green,
+                  const Image8_t *blue);
+
+void WritePPM816 (FILE *s,
+                  const Image8_t *luma,
+                  const Image16_t *chroma);
+
+#endif
+
+
+#endif

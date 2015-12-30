@@ -1,0 +1,71 @@
+
+CC	= ${CROSS_COMPILE}@CC@
+
+# USE_INLINE   - static inline some functions (recommended but optional)
+CFLAGS	+= @CFLAGS@ -I../include -DUSE_INLINE
+
+STRIP	= ${CROSS_COMPILE}@STRIP@
+
+AR	= ${CROSS_COMPILE}@AR@
+
+ARFLAGS	= -rc
+
+RANLIB	= ${CROSS_COMPILE}@RANLIB@
+
+INSTALL	= @INSTALL@
+
+
+.c.o :
+	${CC} ${CFLAGS} -c $<
+
+
+prefix	= @prefix@
+
+
+# codecjpeg.o and codecppm.o is optionally built depending on configure
+LIB_OBJS = \
+	draw.o \
+	histogram.o \
+	hough.o \
+	intimage.o \
+	@CODEC_JPEG_FILES@ \
+	@CODEC_PPM_FILES@ \
+	manipulate.o \
+	operate.o \
+	utility.o
+
+
+# make
+all :	libembedcv.a @BUILD_SHARED_TARGET@
+
+# make install
+install :	all @INSTALL_SHARED_TARGET@
+	${INSTALL} -d ${prefix}/lib
+	${INSTALL} -m 644 libembedcv.a ${prefix}/lib/libembedcv.a
+	${INSTALL} -d ${prefix}/include
+	${INSTALL} -m 644 embedcv.h ${prefix}/include
+
+install-shared :
+	${INSTALL} -d ${prefix}/lib
+	${INSTALL} -m 755 libembedcv.so ${prefix}/lib/libembedcv.so
+
+
+# static archive library
+libembedcv.a :	${LIB_OBJS}
+	${AR} ${ARFLAGS} $@ ${LIB_OBJS}
+	${RANLIB} $@
+
+# shared library
+libembedcv.so : ${LIB_OBJS}
+	rm *.o
+	${CC} ${CFLAGS} -fPIC -c ${LIB_OBJS:.o=.c}
+	${CC} -o $@ ${CFLAGS} -shared ${LIB_OBJS}
+
+
+clean :
+	rm -f *.o *.a *.so
+
+distclean : clean
+	rm -f Makefile
+	rm -f ../include/embedcv.h
+
